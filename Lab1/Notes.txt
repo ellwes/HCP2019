@@ -1,0 +1,27 @@
+*Lab1
+
+**Part1
+**1
+	-N 5000  0.00000000s		O2
+	-N 10000 0.00000000s		O2
+	-N 10000 0.00004196s		no O2
+	-N 5000  0.00002098s		no O2
+
+**2
+Clock Granularity - how often microticks (ticks between real time update) are made. (AKA the minimum time they measure) <- So we need to make a program that runs longer than this.
+
+
+In our case: 20 ticks before the time was updated. The minimum time we could measure was: 9.54e-7
+
+When using RDTSC we got that every tick was had 16 cycles. If we ran the command and slept it for 1 sec -> 2.3e9 cycles.
+
+
+**Part2
+"With all optimizations"
+
+-N 1000:   0.00000224 , 0.00000246 ,  0.00000230 , 0.00000232  (s)
+-N 5000:   0.00001199 , 0.00001214 ,  0.00001240 , 0.00001186  (s)
+-N 10000:  0.00002359 , 0.00002426 ,  0.00002478 , 0.00002657  (s)
+-N 50000:  0.00012287 , 0.00011941 ,  0.00012020 , 0.00011826  (s)
+-N 100000: 0.00023717 , 0.00023820 ,  0.00023655 , 0.00023649  (s)
+
