@@ -6,7 +6,7 @@ void nbody(struct Body *bodies, int steps, int output_steps, int N, double G, do
 	char buffer[1024];
 
 	double t1, t2;
-
+	
 	for (int i = 0; i < steps; i++) {
 		if (output_steps != 0 && (i + output_steps) % output_steps == 0) {
 			snprintf(buffer, 1024, "%d.txt", i);
@@ -14,7 +14,8 @@ void nbody(struct Body *bodies, int steps, int output_steps, int N, double G, do
 		}
 
 		t1 = omp_get_wtime();
-
+		#pragma omp parallel for 
+		 
 		for (int j = 0; j < N; j++) {
 			double fx = 0.0;
 			double fy = 0.0;
@@ -30,7 +31,7 @@ void nbody(struct Body *bodies, int steps, int output_steps, int N, double G, do
 			double ax;
 			double ay;
 			double az;
-
+	//		#pragma omp parallel for private(dx,dy,dz)
 			for (int k = 0; k < N; k++) {
 				if (j != k) {
 					dx = bodies[j].position[0] - bodies[k].old_position[0];
@@ -56,7 +57,9 @@ void nbody(struct Body *bodies, int steps, int output_steps, int N, double G, do
 			bodies[j].position[0] += bodies[j].velocity[0] * DT;
 			bodies[j].position[1] += bodies[j].velocity[1] * DT;
 			bodies[j].position[2] += bodies[j].velocity[2] * DT;
+		
 		}
+		
 
 		t2 = omp_get_wtime();
 
