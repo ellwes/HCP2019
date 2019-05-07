@@ -1,4 +1,13 @@
 #include "pi.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+
+#define SEED     921
+#define NUM_ITER 1000
 
 void init_pi(int set_seed, char *outfile)
 {
@@ -23,4 +32,5 @@ void cleanup_pi()
 
 void compute_pi(int flip, int *local_count, double *answer)
 {
+
 }
