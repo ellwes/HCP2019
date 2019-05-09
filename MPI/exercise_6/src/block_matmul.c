@@ -27,6 +27,8 @@ struct Config {
 	int C_dims[2];
 	int matrix_size;
 
+        
+	int sum = 0; 
 	/* Process local matrix dim */
 	int local_dims[2];
 	int local_size;
@@ -37,9 +39,18 @@ struct Config config;
 void init_matmul(char *A_file, char *B_file, char *outfile)
 {
 	/* Copy output file name to configuration */
+	config.outfile = outfile; 	
 
 	/* Get matrix size header */
+	int A_size;
+	int B_size; 
 
+	MPI_File A_f;
+	MPI_File B_f; 
+	
+	MPI_File_open(MPI_COMM_WORLD, A_file, MPI_MPDE_WRONLY |MPI_MODE_CREATE, MPI_INFO_NULL, &A_f);			
+	MPI_FILE_read_at(A_f, 0, config.A_dims[0], 1, MPI_INT, MPI_STATUS_IGNORE);	
+	
 	/* Broadcast global matrix sizes */
 
 	/* Set dim of tiles relative to the number of processes as NxN where N=sqrt(world_size) */
@@ -82,8 +93,8 @@ void compute_fox()
 {
 
 	/* Compute source and target for verticle shift of B blocks */
-
-	for (int i = 0; i < config.dim[0]; i++) {
+	int i; 
+	for (i = 0; i < config.dim[0]; i++) {
 		/* Diag + i broadcast block A horizontally and use A_tmp to preserve own local A */
 
 		/* dgemm with blocks */
