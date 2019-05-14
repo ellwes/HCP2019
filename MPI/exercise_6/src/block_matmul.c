@@ -27,11 +27,11 @@ struct Config {
 	int C_dims[2];
 	int matrix_size;
 
-HEAD
+
 
         
 	int sum; 
-e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	/* Process local matrix dim */
 	int local_dims[2];
 	int local_size;
@@ -41,7 +41,7 @@ struct Config config;
 
 void init_matmul(char *A_file, char *B_file, char *outfile)
 {
-HEAD
+
 /* Copy output file name to configuration */
 	config.outfile = outfile;
 	MPI_Comm_rank(MPI_COMM_WORLD, &(config.world_rank)); 	
@@ -84,12 +84,12 @@ HEAD
 			printf("rank; %d, j: %d, value: %f..... \n", config.world_rank, j, test[j]);
 		}
 	}
-e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	
 	
 	/* Broadcast global matrix sizes */
 	MPI_Bcast(&config.matrix_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-HEAD
+
 	MPI_Bcast(&(config.A_dims), 2, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&(config.B_dims), 2, MPI_INT, 0, MPI_COMM_WORLD);
 	/* Set dim of tiles relative to the number of processes as NxN where N=sqrt(world_size) */
@@ -97,13 +97,13 @@ HEAD
 	MPI_Dims_create(config.world_size, 2, config.dim);
 	printf("config.dim = (%d, %d)\n", config.dim[0], config.dim[1]);
 	//printf("World_size: %d", config.world_size);	
-=======
+
 
 	/* Set dim of tiles relative to the number of processes as NxN where N=sqrt(world_size) */
 	MPI_Comm_size(MPI_COMM_WORLD, &(config.world_size));
 	MPI_Dims_create(config.world_size, 2, config.dim);
 	
-e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	/* Verify dim of A and B matches for matul and both are square*/
 	if(!(config.A_dims[0] == config.B_dims[0] && config.A_dims[0] == config.A_dims[1] && config.B_dims[0] == config.B_dims[1])) {
 		printf("WRONG DIMENSIONS\n");
@@ -111,7 +111,7 @@ e05f23b04ad4c5e0e0484f6781384969643555dc
 	}
 	/* Create Cart communicator for NxN processes */
 	int period[2] = {1, 1};
-HEAD
+
 	MPI_Cart_create(MPI_COMM_WORLD, 2, config.dim, period, 1, &(config.grid_comm));
 	MPI_Comm_rank(config.grid_comm, &(config.grid_rank));
 	/* Sub div cart communicator to N row communicator */
@@ -122,17 +122,17 @@ HEAD
 	/* Sub div cart communicator to N row communicator */
 	MPI_Comm_rank(MPI_COMM_WORLD, &(config.world_rank));
 	
-e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	int remain_dims[2] = {0, 1};
 	MPI_Cart_sub(config.grid_comm, remain_dims, &(config.row_comm));
 	//MPI_Comm_split(MPI_COMM_WORLD, config.world_rank / config.A_dims[0] , config.world_rank, &(config.row_comm));	
 	MPI_Comm_rank(config.row_comm, &(config.row_rank));
 	MPI_Comm_size(config.row_comm, &(config.row_size));
-HEAD
+
 	printf("Rank %d, Created the N row communicator\n", config.world_rank);	
 
 	
-e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	/* Sub div cart communicator to N col communicator */
 	int remain_dims2[2] = {1, 0};
 	MPI_Cart_sub(config.grid_comm, remain_dims2, &(config.col_comm));	
@@ -149,31 +149,31 @@ e05f23b04ad4c5e0e0484f6781384969643555dc
 	config.local_size = config.local_dims[0] * config.local_dims[1];
 
 	/* Create subarray datatype for local matrix tile */
-HEAD
+
 	int start[2] = {config.row_rank, config.col_rank};
 
 	int start[2] = {config.col_rank, config.row_rank};
-e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	MPI_Type_create_subarray(2, config.A_dims, config.local_dims, start, MPI_ORDER_C, MPI_DOUBLE, &(config.block));
 	MPI_Type_commit(&(config.block));
 
 	/* Create data array to load actual block matrix data */
 	double * A_matrix = (double *) malloc(config.local_size * sizeof(double));	
 	double * B_matrix = (double *) malloc(config.local_size * sizeof(double));
-HEAD
+
 	double * C_matrix = (double *) malloc(config.local_size * sizeof(double));
 	double * A_tmp_matrix = (double *) malloc(config.local_size * sizeof(double));
 	config.A_tmp = A_tmp_matrix;
 	config.C = C_matrix;
 	
-e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	config.A = A_matrix;	
 	config.B = B_matrix;
 
 	/* Set fileview of process to respective matrix block */
 	MPI_Offset viewOffset = config.world_rank * config.local_size * sizeof(double) + sizeof(int) * 2;
 	
-HEAD
+
 	MPI_File_set_view(config.A_file, viewOffset, MPI_DOUBLE, config.block, "native", MPI_INFO_NULL);
 	MPI_File_set_view(config.B_file, viewOffset, MPI_DOUBLE, config.block, "native", MPI_INFO_NULL);
 	
@@ -181,13 +181,13 @@ HEAD
 	MPI_File_set_view(config.A_file, viewOffset, MPI_DOUBLE, config.block, "native", MPI_INFO_NULL);	
 	MPI_File_set_view(config.B_file, viewOffset, MPI_DOUBLE, config.block, "native", MPI_INFO_NULL);
 
- e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	/* Collective read blocks from files */
 	MPI_File_read_all(config.A_file, config.A, config.local_size, MPI_DOUBLE, MPI_STATUS_IGNORE);
 	MPI_File_read_all(config.B_file, config.B, config.local_size, MPI_DOUBLE, MPI_STATUS_IGNORE);
 
  	//JUST FOR TESTING:	
- HEAD
+
 //	int i;
 //	for (i = 0; i < config.local_size; i++) {
 //		printf("Rank: %d, col_rank: %d, row_rank: %d, value: %f \n", config.world_rank, config.col_rank, config.row_rank, config.A[i]); 
@@ -199,7 +199,7 @@ HEAD
 		printf("Rank: %d, col_rank: %d, row_rank: %d, value: %f \n", config.world_rank, config.col_rank, config.row_rank, config.A[i]); 
 		
 	}
- e05f23b04ad4c5e0e0484f6781384969643555dc
+
 	
 
 	/* Close data source files */
