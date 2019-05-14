@@ -12,8 +12,13 @@ int main(int argc, char **argv)
 	next_rank = (rank+1) % size;
 	prev_rank = (rank-1 + size) % size;
 	
-	MPI_Send(&rank, 1, MPI_INT, next_rank, 0, MPI_COMM_WORLD);
-	MPI_Recv(&recv_rank, 1, MPI_INT, prev_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+	if (rank == 0) {
+		MPI_Send(&rank, 1, MPI_INT, next_rank, 0, MPI_COMM_WORLD);
+		MPI_Recv(&recv_rank, 1, MPI_INT, prev_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);	
+	} else {
+		MPI_Recv(&recv_rank, 1, MPI_INT, prev_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);	
+		MPI_Send(&rank, 1, MPI_INT, next_rank, 0, MPI_COMM_WORLD);
+	}
 	printf("%d received %d from rank=%d\n", rank, recv_rank, prev_rank);
 	MPI_Finalize();
 }
