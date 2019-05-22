@@ -190,7 +190,7 @@ void compute_fox()
 		
 		//Matrix multiplication	
 		int ii, j, k;
-		for (ii = 0 ; ii < config.local_size; ii++) {
+		for (ii = 0 ; ii < config.local_dims[0]; ii++) {
 			for (j = 0 ; j < config.local_dims[0]; j++) {
 				for (k = 0 ; k < config.local_dims[1] ; k++) {
 					config.C[ii*config.local_dims[0]+j] += config.A_tmp[k+ii*config.local_dims[0]] * config.B[k*config.local_dims[0]+j];
