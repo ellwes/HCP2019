@@ -127,17 +127,9 @@ void init_matmul(char *A_file, char *B_file, char *outfile)
 
 void cleanup_matmul()
 {
-<<<<<<< HEAD
-        /* Rank zero writes header specifying dim of result matrix C */
-	MPI_File_open(MPI_COMM_WORLD, config.outfile, (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &(config.C_file));
-        if (config.world_rank == 0) {
-=======
-/*        
 	/* Rank zero writes header specifying dim of result matrix C */
-       
         MPI_File_open(MPI_COMM_WORLD, config.outfile, (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &(config.C_file));
 	if (config.world_rank == 0) {
->>>>>>> e820f7b79560cb9217512eab40b010da4a38e5c8
                 MPI_File_write(config.C_file, config.A_dims, 2, MPI_INT, MPI_STATUS_IGNORE);
         }
 
