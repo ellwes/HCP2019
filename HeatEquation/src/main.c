@@ -1,15 +1,19 @@
-include "calc_heat.h"
+#include <stdio.h>
+#include "mpi.h"
+#include "calc_heat.h"
 
 
-int main() {
+int main(int argc, char *argv[]) {
 	/* Variables: */
 	const double K = 0.02;
 	int size = 100;
 	const double heat_start = 350;
 	const double cold_start = 250;
 	const double time = 10;
-	char outfile = "outfile.ans" 
-
+	char * outfile = "outfile.ans"; 
+	
+	MPI_Init(&argc, &argv);
+	
 	/* init solver */
 	init_solver(K, size, heat_start, cold_start, time, outfile);	
 		
@@ -17,21 +21,26 @@ int main() {
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	/* start timer */
-	start_time = MPI_Wtime();
+	double start_time = MPI_Wtime();
 
 	/* calc heat equation */
 	calc_heat();
 	
 	/* end timer */
 	MPI_Barrier(MPI_COMM_WORLD);
-	end_time = MPI_Wtime();
-
-
+	double end_time = MPI_Wtime();
+	
+	int world_rank;
+	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+	
 	/* print given time*/
 	if (world_rank == 0) {
-		run_time = end_time - start_time;
+		double run_time = end_time - start_time;
 		printf("duration: %f", run_time);
 	}
+	
+	MPI_Finalize();
 
 	return 0;
 }
+

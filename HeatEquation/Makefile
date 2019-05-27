@@ -4,8 +4,8 @@ OBJ = $(SRC:.c=.o)
 BIN = ./bin
 TARGET = calc.out
 
-LDFLAGS = -lm 
-CFLAGS = -I./include -g -Wall -O3
+DFLAGS = -lm 
+CFLAGS = -I./include -g -std=c99 -Wall -O3
 
 all: dir $(BIN)/$(TARGET)
 

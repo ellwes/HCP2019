@@ -1,11 +1,10 @@
-
+#include <stdio.h>
+#include "calc_heat.h"
 
 struct Config {
 	char *outfile;
 	
 	/* Full matrix */
-	double ** matrix;
-	double ** matrix_tmp;
 	int matrix_dim[2];
 	int matrix_size;
 
@@ -15,21 +14,23 @@ struct Config {
 	int grid_dim[2]; //Dimensions of processes	
 
 	/* Communicators dims and ranks */
-	int dim[2];
 	int world_rank, world_size, grid_rank;
 	int part_rank;
 
-	/* Local dims and local type*/
-	int local_dims[2];
+	/* Matrix and local dims and local type*/
+	double ** local_matrix;
+	double ** local_matrix_tmp;
+	int local_dims[2]; // Dimension including ghost cells
+	int write_local_dims[2]; // When writing to file, we do not want to use ghost cells. Therefor this is local dims without counting the ghost cells
 	int block;
 
 	/* Time */	
 	double time;
 	double d_time; //Time step
-} Config;
+} config;
 
 
-void init_solver(const double K, int size, const double heat_start, const double cold_start, const double time, char outfile) {
+void init_solver(const double K, int size, const double heat_start, const double cold_start, const double time, char * outfile) {
  	config.outfile = outfile;
 	
 	/* Init time */	
@@ -41,45 +42,102 @@ void init_solver(const double K, int size, const double heat_start, const double
  
 	int period[2] = {0, 0};
 	MPI_Cart_create(MPI_COMM_WORLD, 2, config.grid_dim, period, 1, &config.grid_comm);
-	MPI_Comm_rank(config.grid_comm, &condig.grid_rank);
+	MPI_Comm_rank(config.grid_comm, &config.grid_rank);
+
 
 	/* Setup sizes of local matrix tiles */
-        config.local_dim[0] = config.dim[0] / config.grid_dim[0];
-	config.local_dim[1] = config.dim[1] / config.grid_dim[1];
+        config.local_dims[0] = config.matrix_dim[0] / config.grid_dim[0] + 2;
+	config.local_dims[1] = config.matrix_dim[1] / config.grid_dim[1] + 2;
+
+
+	config.write_local_dims[0] = config.local_dims[0] - 2; 
+	config.write_local_dims[1] = config.local_dims[1] - 2; 
 
 	/* Create subarray datatype for local matrix tile */	
 	int start[2];
 	MPI_Cart_coords(config.grid_comm, config.grid_rank, 2, start);
-	start[0] *= config.local_dims[0];
-	start[1] *= config.local_dims[0];
-	MPI_Type_create_subarray(2, config.A_dims, config.local_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &config.block);
+	start[0] *= config.write_local_dims[0];
+	start[1] *= config.write_local_dims[0];
+	MPI_Type_create_subarray(2, config.grid_dim, config.write_local_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &config.block);
 
  	/* Create data array */
-	double m[size][size];
-	double m_tmp[size][size];
+	double m[config.local_dims[0]][config.local_dims[1]];
+	double m_tmp[config.local_dims[0]][config.local_dims[1]];
 
-	config.matrix = &m; 
-	config.matrix_tmp = &m_tmp;
+
+
 
 	/* Init data array with heat_start and cold_start */
-	for (int i = 0; i < size; i++) {
-		for (int j = 0; j < size; j++) {
-			if(j == 0 || j == size || i == 0 || i == size) {
-				config.matrix[i] = heat_start; 
-				config.matrix_tmp[i] = heat_start;
-			} else {
-				config.matrix[i] = cold_start;
-				config.matrix_tmp[i] = cold_start;
+	for (int i = 1; i < config.local_dims[0]-1; i++) {
+		for (int j = 1; j < config.local_dims[1]-1; j++) {
+			if (config.grid_rank < config.grid_dim[0]) {
+				// Set upper to heat:				
+				if(i == 1) {
+					m[i][j] = heat_start;	
+					m_tmp[i][j] = heat_start;	
+				} else if (m[i][j] != heat_start) { // in case we should set both a col and row
+					m[i][j] = cold_start;
+					m_tmp[i][j] = cold_start;
+				}
+			}
+			if (config.grid_rank % config.grid_dim[1] == 0 ) {	
+				// Set right to heat:				
+				if(j == config.local_dims[1]) {
+					m[i][j] = heat_start;	
+					m_tmp[i][j] = heat_start;	
+				} else if (m[i][j] != heat_start) { // in case we should set both a col and row
+					m[i][j] = cold_start;
+					m_tmp[i][j] = cold_start;
+				}
 			}
 			
+			if (config.grid_rank % config.grid_dim[1] == 2) {
+				//Set left to heat
+				if(j == 1) {
+					m[i][j] = heat_start;
+					m_tmp[i][j] = heat_start;
+				} else if (m[i][j] != heat_start) {
+					m[i][j] = cold_start;
+					m_tmp[i][j] = cold_start;
+				}
+			}
+			
+			if (config.grid_rank > (config.grid_dim[0] - 1) * (config.grid_dim[1])) {
+				//Set lower row
+				if (i == config.local_dims[0] - 1) {
+					m[i][j] = heat_start; 
+					m_tmp[i][j] = heat_start; 
+				} else if (m[i][j] != heat_start) {
+					m[i][j] = cold_start;
+					m_tmp[i][j] = cold_start; 
+				}
+			}
+			
+			if (m[i][j] != heat_start) {
+				m[i][j] = cold_start;
+				m_tmp[i][j] = cold_start;
+			}
 		}
 	}
 
-
+	config.local_matrix = &m; 
+	config.local_matrix_tmp = &m_tmp;
 }
 
 
 
+
+void print_matrix() {
+	for (int i = 0; i < config.local_dims[0]; i++) {
+		for (int j = 0; j < config.local_dims[1]; j++) {
+			printf("%f ", config.local_matrix[i][j]);
+			if( j == config.local_dims[1] -1 ) {
+				printf("\n");
+			} 
+		}
+	}
+
+}
 
 void cleanup() {
  /* Set file view and write to file - använd grid_comm?  */
