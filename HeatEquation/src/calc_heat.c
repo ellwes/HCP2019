@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "calc_heat.h"
 
 struct Config {
@@ -27,8 +28,9 @@ struct Config {
 
 	/*spatial*/
 	double hx;
-	double hy
-
+	double hy;
+	
+	double K;
 	/* Time */	
 	double time;
 	double d_time; //Time step
@@ -41,6 +43,9 @@ void init_solver(const double K, int size, const double heat_start, const double
 	/* Init time */	
 	config.time = 0; //How should this be handeled between processes?? 
 	
+	config.K = K;	
+
+
  	/* Create Cart communicator for NxN processes */
 	MPI_Comm_size(MPI_COMM_WORLD, &config.world_size);
 	MPI_Dims_create(config.world_size, 2, config.grid_dim);
@@ -66,8 +71,10 @@ void init_solver(const double K, int size, const double heat_start, const double
 	MPI_Type_create_subarray(2, config.grid_dim, config.write_local_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &config.block);
 
  	/* Create data array */
-	double m[config.local_dims[0]][config.local_dims[1]];
-	double m_tmp[config.local_dims[0]][config.local_dims[1]];
+	//double m[config.local_dims[0]][config.local_dims[1]] = {};	//set to zeros
+	//double m_tmp[config.local_dims[0]][config.local_dims[1]] = {};
+	double ** m = (double **) malloc(sizeof(double *) * config.local_dims[0] + sizeof(double) * config.local_dims[0] * config.local_dims[1]);
+	double ** m_tmp = (double **) malloc(sizeof(double *) * config.local_dims[0] + sizeof(double) * config.local_dims[0] * config.local_dims[1]);
 
 	/*spatial time*/
 	config.hx = 1/size;
@@ -126,8 +133,8 @@ void init_solver(const double K, int size, const double heat_start, const double
 		}
 	}
 
-	config.local_matrix = &m; 
-	config.local_matrix_tmp = &m_tmp;
+	config.local_matrix = m; 
+	config.local_matrix_tmp = m_tmp;
 }
 
 
@@ -158,16 +165,6 @@ void cleanup() {
 
 
 
-void calc_heat() {
- 
- for(double t = config.time; t > 0; t--) { //Maybe change this to the other way around? (t = 0; t < config.time; t++)
- 	/* Broadcast values to close cells */
- 	/* Calculate current theta */
-	step();
-	MPI_Barrier();
- }
-
-}
 
 void step() {
 	
@@ -187,24 +184,24 @@ void step() {
 	for(i = 0; i < 4; i++){
 		//Get the element to send and put it in buffer:
 		int j;
-		for(j = 0; j < config.local_size-2; j++){
+		for(j = 0; j < config.local_dims[(int) i/2] - 2; j++){ //i = 0/1 are rows, 2/4 are cols
 			//send buffer depending if it's a row or col ghost cell.
 			//send_buffer = i < 2 ? config.matrix[offset_row[i]][offset_col[i]+j] : config.matrix[offset_row[i]+j][offset_col[i]]
 			//set send_buffer and receiving row/col to correct values depending on current row that is being sent.
 			if(i < 2){
-				send_buffer = config.matrix[offset_row[i]][offset_col[i] + j];
+				send_buffer = config.local_matrix[offset_row[i]][offset_col[i] + j];
 				rec_row = abs(offset_row[i] - 1);
 				rec_col = offset_col[i] + j;
 			}
 			else{
-				send_buffer = config.matrix[offset_row[i] + j][offset_col[i]];
+				send_buffer = config.local_matrix[offset_row[i] + j][offset_col[i]];
 				rec_row = offset_row[i] + j;
 				rec_col = abs(offset_col[i] - 1);
 			}
 			
 			if(dir[i] != MPI_PROC_NULL){ //send & recv.
 				MPI_Send(&send_buffer, 1, MPI_DOUBLE, dir[i], config.grid_rank, config.grid_comm);
-				MPI_Recv(&recv_buffer, 1, MPI_DOUBLE, dir[i], config.grid_comm, MPI_STATUS_IGNORE);
+				MPI_Recv(&recv_buffer, 1, MPI_DOUBLE, dir[i], dir[i],config.grid_comm, MPI_STATUS_IGNORE);
 			}
 			else{
 				//Process tries to send to something outside of the grid space.
@@ -212,7 +209,7 @@ void step() {
 				recv_buffer = send_buffer;
 			}
 			//Update the matrix value
-			config.matrix[rec_row][rec_col] = recv_buffer;					
+			config.local_matrix[rec_row][rec_col] = recv_buffer;					
 		}
 	}
 
@@ -222,19 +219,29 @@ void step() {
 	for(i = 1; i < config.local_dims[0] - 1; i++){
 		for(j = 1; j < config.local_dims[1] - 1; j++){
 			//Compute the stepping. Where to define K.
-			config.matrix_tmp[i][j] = config.matrix[i][j] + K * config.d_time * ((config.matrix[i + 1][j] - 2 * config.matrix[i][j] + config.matrix[i - 1][j]) / config.hx / config.hx + (config.matrix[i][j + 1] - 2 * config.matrix[i][j] + config.matrix[i][j -1]) / config.hy / config.hy);
+			config.local_matrix_tmp[i][j] = config.local_matrix[i][j] + config.K * config.d_time * ((config.local_matrix[i + 1][j] - 2 * config.local_matrix[i][j] + config.local_matrix[i - 1][j]) / config.hx / config.hx + (config.local_matrix[i][j + 1] - 2 * config.local_matrix[i][j] + config.local_matrix[i][j -1]) / config.hy / config.hy);
 		}
 	} 
 
 	/*update the config.matrix*/
 	for(i = 1; i < config.local_dims[0] - 1; i++){
 		for(j = 1; j < config.local_dims[0] -1; j++){
-			config.matrix[i][j] = config.matrix_tmp[i][j];
+			config.local_matrix[i][j] = config.local_matrix_tmp[i][j];
 		}
 	}
 }
 
 
+void calc_heat() {
+ 
+ for(double t = config.time; t > 0; t--) { //Maybe change this to the other way around? (t = 0; t < config.time; t++)
+ 	/* Broadcast values to close cells */
+ 	/* Calculate current theta */
+	step();
+	MPI_Barrier(config.grid_rank);
+ }
+
+}
 
 
 
