@@ -21,8 +21,8 @@ struct Config {
 	int part_rank;
 
 	/* Matrix and local dims and local type*/
-	double ** local_matrix;
-	double ** local_matrix_tmp;
+	double * local_matrix;
+	double * local_matrix_tmp;
 	int local_dims[2]; // Dimension including ghost cells
 	int write_local_dims[2]; // When writing to file, we do not want to use ghost cells. Therefor this is local dims without counting the ghost cells
 	int block;
@@ -37,6 +37,14 @@ struct Config {
 	double d_time; //Time step
 } config;
 
+double get_element(int row, int col, double * matrix) {
+	double res = config.local_matrix[row * config.local_dims[0] + col];
+	return res;
+}
+
+void set_element(int row, int col, double element, double * matrix) {
+	matrix[row * config.local_dims[0] + col] = element;
+}
 
 void init_solver(const double K, int size, const double heat_start, const double cold_start, const double time, char * outfile) {
  	config.outfile = outfile;
@@ -78,16 +86,16 @@ void init_solver(const double K, int size, const double heat_start, const double
  	/* Create data array */
 	//double m[config.local_dims[0]][config.local_dims[1]] = {};	//set to zeros
 	//double m_tmp[config.local_dims[0]][config.local_dims[1]] = {};
-	//double ** m = (double **) malloc(sizeof(double *) * config.local_dims[0] + sizeof(double) * config.local_dims[0] * config.local_dims[1]);
-	//double ** m_tmp = (double **) malloc(sizeof(double *) * config.local_dims[0] + sizeof(double) * config.local_dims[0] * config.local_dims[1]);
+	double * m = (double *) malloc(sizeof(double) * config.local_dims[0] * config.local_dims[1]);
+	double * m_tmp = (double *) malloc(sizeof(double) * config.local_dims[0] * config.local_dims[1]);
 	
-	double ** m = (double **) malloc(config.local_dims[0] * sizeof(double*));
-	double ** m_tmp = (double **) malloc(config.local_dims[0] * sizeof(double*));
+	//double ** m = (double **) calloc(config.local_dims[0], sizeof(double*));
+	//double ** m_tmp = (double **) calloc(config.local_dims[0], sizeof(double*));
 
-	for(int i = 0; i < config.local_dims[0]; i++) {
-		double m[i] = (double *) malloc(config.local_dims[1] * sizeof(double));
-		double m_tmp[i] = (double *) malloc(config.local_dims[1] * sizeof(double));
-	}
+	//for(int i = 0; i < config.local_dims[0]; i++) {
+	//	double m[i] = (double *) calloc(config.local_dims[1], sizeof(double));
+	//	double m_tmp[i] = (double *) calloc(config.local_dims[1], sizeof(double));
+	//}
 
 	/*spatial time*/
 	config.hx = 1/size;
@@ -99,72 +107,69 @@ void init_solver(const double K, int size, const double heat_start, const double
 			if (config.grid_rank < config.grid_dim[0]) {
 				// Set upper to heat:				
 				if(i == 1) {
-					m[i][j] = heat_start;	
-					m_tmp[i][j] = heat_start;	
-				} else if (m[i][j] != heat_start) { // in case we should set both a col and row
-					m[i][j] = cold_start;
-					m_tmp[i][j] = cold_start;
+					set_element(i, j, heat_start, m);	
+					set_element(i, j, heat_start, m_tmp);
+				} else if (get_element(i, j, m) != heat_start) { // in case we should set both a col and row
+					set_element(i, j, cold_start, m);
+					set_element(i, j, cold_start, m_tmp);
 				}
-	
 			}
 			if (config.grid_rank % config.grid_dim[1] == 0 ) {	
 				// Set right to heat:				
 				if(j == config.local_dims[1]) {
-					m[i][j] = heat_start;	
-					m_tmp[i][j] = heat_start;	
-				} else if (m[i][j] != heat_start) { // in case we should set both a col and row
-					m[i][j] = cold_start;
-					m_tmp[i][j] = cold_start;
+					set_element(i, j, heat_start, m);	
+					set_element(i, j, heat_start, m_tmp);
+				} else if (get_element(i, j, m) != heat_start) { // in case we should set both a col and row
+					set_element(i, j, cold_start, m);
+					set_element(i, j, cold_start, m_tmp);
 				}
 			}
-			
+		/*	
 			if (config.grid_rank % config.grid_dim[1] == 2) {
 				//Set left to heat
 				if(j == 1) {
-					m_tmp[i][j] = cold_start;
+					set_element(i, j, cold_start, m_tmp);
 				}
 			}
-			
+		*/	
 			if (config.grid_rank % config.grid_dim[1] == 2) {
 				//Set left to heat
 				if(j == 1) {
-					m[i][j] = heat_start;
-					m_tmp[i][j] = heat_start;
-				} else if (m[i][j] != heat_start) {
-					m[i][j] = cold_start;
-					m_tmp[i][j] = cold_start;
+					set_element(i, j, heat_start, m);
+					set_element(i, j, heat_start, m_tmp);				
+				} else if (get_element(i, j, m) != heat_start) {
+					set_element(i, j, cold_start, m);
+					set_element(i, j, cold_start, m_tmp);
 				}
 			}
 			
 			if (config.grid_rank > (config.grid_dim[0] - 1) * (config.grid_dim[1])) {
 				//Set lower row
 				if (i == config.local_dims[0] - 1) {
-					m[i][j] = heat_start; 
-					m_tmp[i][j] = heat_start; 
-				} else if (m[i][j] != heat_start) {
-					m[i][j] = cold_start;
-					m_tmp[i][j] = cold_start; 
+					set_element(i, j, heat_start, m);
+					set_element(i, j, heat_start, m_tmp);				
+				} else if (get_element(i, j, m) != heat_start) {
+					set_element(i, j, cold_start, m);
+					set_element(i, j, cold_start, m);
 				}
 			}
 			
-			if (m[i][j] != heat_start) {
-				m[i][j] = cold_start;
-				m_tmp[i][j] = cold_start;
+			if (get_element(i, j, m) != heat_start) {
+				set_element(i, j, cold_start, m);
+				set_element(i, j, cold_start, m_tmp);
 			}
 		}
 	}
-
+	
 	config.local_matrix = m; 
-	config.local_matrix_tmp = m_tmp;
+	config.local_matrix_tmp = m_tmp; 
+
 }
-
-
-
 
 void print_matrix() {
 	for (int i = 0; i < config.local_dims[0]; i++) {
 		for (int j = 0; j < config.local_dims[1]; j++) {
-			printf("%f ", config.local_matrix[i][j]);
+			printf("%f ", get_element(i, j, config.local_matrix));
 			if( j == config.local_dims[1] -1 ) {
 				printf("\n");
 			} 
@@ -210,12 +215,14 @@ void step() {
 			//send_buffer = i < 2 ? config.matrix[offset_row[i]][offset_col[i]+j] : config.matrix[offset_row[i]+j][offset_col[i]]
 			//set send_buffer and receiving row/col to correct values depending on current row that is being sent.
 			if(i < 2){
-				send_buffer = config.local_matrix[offset_row[i]][offset_col[i] + j];
+				send_buffer = get_element(offset_row[i], offset_col[i] + j, config.local_matrix);
+				//send_buffer = config.local_matrix[offset_row[i]][offset_col[i] + j];
 				rec_row = abs(offset_row[i] - 1);
 				rec_col = offset_col[i] + j;
 			}
 			else{
-				send_buffer = config.local_matrix[offset_row[i] + j][offset_col[i]];
+				send_buffer = get_element(offset_row[i] + j, offset_col[i], config.local_matrix);
+				//send_buffer = config.local_matrix[offset_row[i] + j][offset_col[i]];
 				rec_row = offset_row[i] + j;
 				rec_col = abs(offset_col[i] - 1);
 			}
@@ -230,7 +237,8 @@ void step() {
 				recv_buffer = send_buffer;
 			}
 			//Update the matrix value
-			config.local_matrix[rec_row][rec_col] = recv_buffer;					
+			set_element(rec_row, rec_col, recv_buffer, config.local_matrix);
+			//config.local_matrix[rec_row][rec_col] = recv_buffer;					
 		}
 	}
 
@@ -240,15 +248,26 @@ void step() {
 	for(i = 1; i < config.local_dims[0] - 1; i++){
 		for(j = 1; j < config.local_dims[1] - 1; j++){
 			//Compute the stepping. Where to define K.
-			config.local_matrix_tmp[i][j] = config.local_matrix[i][j] + config.K * config.d_time * ((config.local_matrix[i + 1][j] - 2 * config.local_matrix[i][j] + config.local_matrix[i - 1][j]) / config.hx / config.hx + (config.local_matrix[i][j + 1] - 2 * config.local_matrix[i][j] + config.local_matrix[i][j -1]) / config.hy / config.hy);
+			double u_11 = get_element(i, j, config.local_matrix);
+			double u_01 = get_element(i - 1, j, config.local_matrix);
+			double u_21 = get_element(i + 1, j, config.local_matrix);
+			double u_10 = get_element(i, j - 1, config.local_matrix);
+			double u_12 = get_element(i, j + 1, config.local_matrix); 			
+
+			double tmp = u_11 + config.K * config.d_time * ((u_21 - 2 * u_11 + u_01) / config.hx / config.hx  +  (u_12 -2 * u_11 + u_10) / config.hy / config.hy);
+			set_element(i, j, tmp, config.local_matrix_tmp);
+ 
+			//config.local_matrix_tmp[i][j] = config.local_matrix[i][j] + config.K * config.d_time * ((config.local_matrix[i + 1][j] - 2 * config.local_matrix[i][j] + config.local_matrix[i - 1][j]) / config.hx / config.hx + (config.local_matrix[i][j + 1] - 2 * config.local_matrix[i][j] + config.local_matrix[i][j -1]) / config.hy / config.hy);
 		}
 	} 
 
 	/*update the config.matrix*/
 	for(i = 1; i < config.local_dims[0] - 1; i++){
 		for(j = 1; j < config.local_dims[0] -1; j++){
-			config.local_matrix[i][j] = config.local_matrix_tmp[i][j];
+			double tmp = get_element(i, j, config.local_matrix_tmp);
+			set_element(i, j, tmp, config.local_matrix);
 		}
+
 	}
 }
 
@@ -259,3 +278,10 @@ void calc_heat() {
  	/* Broadcast values to close cells */
  	/* Calculate current theta */
 	step();
+	MPI_Barrier(config.grid_rank);
+ }
+
+}
+
+
+
