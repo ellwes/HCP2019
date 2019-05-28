@@ -2,10 +2,11 @@
 #include "mpi.h"
 #include "calc_heat.h"
 
+#define K 0.02
 
 int main(int argc, char *argv[]) {
 	/* Variables: */
-	const double K = 0.02;
+	//const double K = 0.02;
 	int size = 100;
 	const double heat_start = 350;
 	const double cold_start = 250;
