@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "calc_heat.h"
 
 struct Config {
@@ -45,7 +46,6 @@ void init_solver(const double K, int size, const double heat_start, const double
 	
 	config.K = K;	
 
-
  	/* Create Cart communicator for NxN processes */
 	MPI_Comm_size(MPI_COMM_WORLD, &config.world_size);
 	MPI_Dims_create(config.world_size, 2, config.grid_dim);
@@ -56,25 +56,38 @@ void init_solver(const double K, int size, const double heat_start, const double
 
 
 	/* Setup sizes of local matrix tiles */
+	config.matrix_dim[0] = sqrt(size);
+	config.matrix_dim[1] = sqrt(size);	
+
         config.local_dims[0] = config.matrix_dim[0] / config.grid_dim[0] + 2;
 	config.local_dims[1] = config.matrix_dim[1] / config.grid_dim[1] + 2;
 
-
 	config.write_local_dims[0] = config.local_dims[0] - 2; 
 	config.write_local_dims[1] = config.local_dims[1] - 2; 
-
+	
 	/* Create subarray datatype for local matrix tile */	
 	int start[2];
 	MPI_Cart_coords(config.grid_comm, config.grid_rank, 2, start);
 	start[0] *= config.write_local_dims[0];
 	start[1] *= config.write_local_dims[0];
-	MPI_Type_create_subarray(2, config.grid_dim, config.write_local_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &config.block);
 
+
+	MPI_Type_create_subarray(2, config.matrix_dim, config.write_local_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &config.block);
+
+	
  	/* Create data array */
 	//double m[config.local_dims[0]][config.local_dims[1]] = {};	//set to zeros
 	//double m_tmp[config.local_dims[0]][config.local_dims[1]] = {};
-	double ** m = (double **) malloc(sizeof(double *) * config.local_dims[0] + sizeof(double) * config.local_dims[0] * config.local_dims[1]);
-	double ** m_tmp = (double **) malloc(sizeof(double *) * config.local_dims[0] + sizeof(double) * config.local_dims[0] * config.local_dims[1]);
+	//double ** m = (double **) malloc(sizeof(double *) * config.local_dims[0] + sizeof(double) * config.local_dims[0] * config.local_dims[1]);
+	//double ** m_tmp = (double **) malloc(sizeof(double *) * config.local_dims[0] + sizeof(double) * config.local_dims[0] * config.local_dims[1]);
+	
+	double ** m = (double **) malloc(config.local_dims[0] * sizeof(double*));
+	double ** m_tmp = (double **) malloc(config.local_dims[0] * sizeof(double*));
+
+	for(int i = 0; i < config.local_dims[0]; i++) {
+		double m[i] = (double *) malloc(config.local_dims[1] * sizeof(double));
+		double m_tmp[i] = (double *) malloc(config.local_dims[1] * sizeof(double));
+	}
 
 	/*spatial time*/
 	config.hx = 1/size;
@@ -92,6 +105,7 @@ void init_solver(const double K, int size, const double heat_start, const double
 					m[i][j] = cold_start;
 					m_tmp[i][j] = cold_start;
 				}
+	
 			}
 			if (config.grid_rank % config.grid_dim[1] == 0 ) {	
 				// Set right to heat:				
@@ -100,6 +114,13 @@ void init_solver(const double K, int size, const double heat_start, const double
 					m_tmp[i][j] = heat_start;	
 				} else if (m[i][j] != heat_start) { // in case we should set both a col and row
 					m[i][j] = cold_start;
+					m_tmp[i][j] = cold_start;
+				}
+			}
+			
+			if (config.grid_rank % config.grid_dim[1] == 2) {
+				//Set left to heat
+				if(j == 1) {
 					m_tmp[i][j] = cold_start;
 				}
 			}
@@ -238,10 +259,3 @@ void calc_heat() {
  	/* Broadcast values to close cells */
  	/* Calculate current theta */
 	step();
-	MPI_Barrier(config.grid_rank);
- }
-
-}
-
-
-
