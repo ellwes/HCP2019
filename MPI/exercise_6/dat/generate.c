@@ -19,12 +19,15 @@ int main(int argc, char *argv[])
 	double *B = (double*)malloc(sizeof(double) * (B_dims[0] * B_dims[1]));
 	double *C = (double*)malloc(sizeof(double) * (A_dims[0] * B_dims[1]));
 	//double *C_test = (double*)malloc(sizeof(double) * (A_dims[0] * B_dims[1]));
-
+	printf("A matrix from generate.c:\n");
 	for (int i = 0; i < A_dims[0] * A_dims[1]; i++) {
 		A[i] = (double)rand() / (double)RAND_MAX;
+		//printf("%f ", A[i]);	
 	}
+	printf("\nB Matrix from generate.c:\n");
 	for (int i = 0; i < B_dims[0] * B_dims[1]; i++) {
 		B[i] = (double)rand() / (double)RAND_MAX;
+		//printf("%f ", B[i]);
 	}
 
 	cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
