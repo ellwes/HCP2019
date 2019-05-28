@@ -5,13 +5,13 @@
 
 int main(int argc, char *argv[]) {
 	/* Variables: */
+
 	const double K = 0.02;
 	int size = 100;
 	const double heat_start = 350;
 	const double cold_start = 250;
 	const double time = 10;
 	char * outfile = "outfile.ans"; 
-	
 	MPI_Init(&argc, &argv);
 	
 	/* init solver */
