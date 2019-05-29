@@ -2,7 +2,7 @@
 #include "mpi.h"
 #include "calc_heat.h"
 
-#define K 0.02
+//#define K 0.02
 
 int main(int argc, char *argv[]) {
 	/* Variables: */
@@ -24,7 +24,8 @@ int main(int argc, char *argv[]) {
 		
 	/* wait for all process to be done with init */
 	MPI_Barrier(MPI_COMM_WORLD);
-
+	
+	
 	/* start timer */
 	double start_time = MPI_Wtime();
 

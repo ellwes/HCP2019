@@ -38,7 +38,7 @@ struct Config {
 } config;
 
 double get_element(int row, int col, double * matrix) {
-	double res = config.local_matrix[row * config.local_dims[0] + col];
+	double res = matrix[row * config.local_dims[0] + col];
 	return res;
 }
 
@@ -54,8 +54,12 @@ void init_solver(const double K, int size, const double heat_start, const double
 	
 	config.K = K;	
 
- 	/* Create Cart communicator for NxN processes */
+	/* intit world config */	
 	MPI_Comm_size(MPI_COMM_WORLD, &config.world_size);
+	MPI_Comm_rank(MPI_COMM_WORLD, &config.world_rank);
+
+
+ 	/* Create Cart communicator for NxN processes */
 	MPI_Dims_create(config.world_size, 2, config.grid_dim);
  
 	int period[2] = {0, 0};
@@ -82,20 +86,9 @@ void init_solver(const double K, int size, const double heat_start, const double
 
 	MPI_Type_create_subarray(2, config.matrix_dim, config.write_local_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &config.block);
 
-	
  	/* Create data array */
-	//double m[config.local_dims[0]][config.local_dims[1]] = {};	//set to zeros
-	//double m_tmp[config.local_dims[0]][config.local_dims[1]] = {};
-	double * m = (double *) malloc(sizeof(double) * config.local_dims[0] * config.local_dims[1]);
-	double * m_tmp = (double *) malloc(sizeof(double) * config.local_dims[0] * config.local_dims[1]);
-	
-	//double ** m = (double **) calloc(config.local_dims[0], sizeof(double*));
-	//double ** m_tmp = (double **) calloc(config.local_dims[0], sizeof(double*));
-
-	//for(int i = 0; i < config.local_dims[0]; i++) {
-	//	double m[i] = (double *) calloc(config.local_dims[1], sizeof(double));
-	//	double m_tmp[i] = (double *) calloc(config.local_dims[1], sizeof(double));
-	//}
+	double * m = (double *) calloc(config.local_dims[0] * config.local_dims[1], sizeof(double));
+	double * m_tmp = (double *) calloc(config.local_dims[0] * config.local_dims[1], sizeof(double));
 
 	/*spatial time*/
 	config.hx = 1/size;
@@ -105,7 +98,7 @@ void init_solver(const double K, int size, const double heat_start, const double
 	for (int i = 1; i < config.local_dims[0]-1; i++) {
 		for (int j = 1; j < config.local_dims[1]-1; j++) {
 			if (config.grid_rank < config.grid_dim[0]) {
-				// Set upper to heat:				
+				// Set upper to heat:
 				if(i == 1) {
 					set_element(i, j, heat_start, m);	
 					set_element(i, j, heat_start, m_tmp);
@@ -124,15 +117,7 @@ void init_solver(const double K, int size, const double heat_start, const double
 					set_element(i, j, cold_start, m_tmp);
 				}
 			}
-		/*	
-			if (config.grid_rank % config.grid_dim[1] == 2) {
-				//Set left to heat
-				if(j == 1) {
-					set_element(i, j, cold_start, m_tmp);
-				}
-			}
-		*/	
-			if (config.grid_rank % config.grid_dim[1] == 2) {
+			if (config.grid_rank % config.grid_dim[1] == 1) {
 				//Set left to heat
 				if(j == 1) {
 					set_element(i, j, heat_start, m);
@@ -160,16 +145,22 @@ void init_solver(const double K, int size, const double heat_start, const double
 			}
 		}
 	}
-	
+
+	printf("NU JÄVLAR\n");	
 	config.local_matrix = m; 
 	config.local_matrix_tmp = m_tmp; 
+	printf("DEHÄR DÅÅÅ????\n");
+
+	if (config.grid_rank == 4) {
+		print_matrix(config.local_matrix);
+	}
 
 }
 
-void print_matrix() {
+void print_matrix( double * matrix) {
 	for (int i = 0; i < config.local_dims[0]; i++) {
 		for (int j = 0; j < config.local_dims[1]; j++) {
-			printf("%f ", get_element(i, j, config.local_matrix));
+			printf("%f ", get_element(i, j, matrix));	
 			if( j == config.local_dims[1] -1 ) {
 				printf("\n");
 			} 
