@@ -95,7 +95,7 @@ void init_matmul(char *A_file, char *B_file, char *outfile)
 	
 	/* Setup sizes of full matrices */
 	//GJORT??!!
-	printf("Size of big A: (%d, %d), B: (%d, %d), %d", config.A_dims[0], config.A_dims[1], config.B_dims[0], config.B_dims[1], config.grid_rank);	
+	//printf("Size of big A: (%d, %d), B: (%d, %d), %d", config.A_dims[0], config.A_dims[1], config.B_dims[0], config.B_dims[1], config.grid_rank);	
 	/* Setup sizes of local matrix tiles */
 	config.local_dims[0] = config.A_dims[0] / config.dim[0];
 	config.local_dims[1] = config.A_dims[1] / config.dim[1];
@@ -128,14 +128,14 @@ void init_matmul(char *A_file, char *B_file, char *outfile)
 	/* Collective read blocks from files */
 	int errA = MPI_File_read_all(config.A_file, config.A, config.local_size, MPI_DOUBLE, MPI_STATUS_IGNORE);
 	int errB = MPI_File_read_all(config.B_file, config.B, config.local_size, MPI_DOUBLE, MPI_STATUS_IGNORE);
-	printf("Finished reading %d, return_val A:%d, return_val B:%d\n", config.grid_rank, errA, errB);
-	printf("Printing matrix A:\n");
-	print_matrix(config.A);
+	//printf("Finished reading %d, return_val A:%d, return_val B:%d\n", config.grid_rank, errA, errB);
+	//printf("Printing matrix A:\n");
+	//print_matrix(config.A);
 	//MPI_Barrier(config.grid_comm);
 	/* Close data source files */
         MPI_File_close(&(config.A_file));
       	MPI_File_close(&(config.B_file));
-	printf("closed the file %d\n", config.grid_rank);
+	//printf("closed the file %d\n", config.grid_rank);
 	//MPI_Barrier(config.grid_comm);
 }
 
@@ -173,7 +173,7 @@ void compute_fox()
 	int i;
 	printf("Inside compute_fox! %d, config.dim is:%d\n", config.grid_rank, config.dim[0]);
 	for (i = 0; i < config.dim[0]; i++) {
-		printf("updating A_tmp i:%d, %d\n", i, config.grid_rank);
+		//printf("updating A_tmp i:%d, %d\n", i, config.grid_rank);
 		/* Diag + i broadcast block A horizontally and use A_tmp to preserve own local A */
 		if((config.col_rank+i)%config.dim[0] == config.row_rank){
 			int q;
@@ -182,14 +182,14 @@ void compute_fox()
 			}
 		}
 
-		printf("initiating broadcast i:%d, %d\n", i, config.grid_rank);
+		//printf("initiating broadcast i:%d, %d\n", i, config.grid_rank);
 		for(diag = 0; diag < config.dim[0]; diag++){
 			if((int)config.grid_rank/config.dim[0] == diag){
 				//broadcast along the row
 				MPI_Bcast(config.A_tmp, config.local_size, MPI_DOUBLE, (diag+i)%config.dim[0], config.row_comm);
 			}
 		}		
-		printf("finished broadcast i:%d, %d\n", i, config.grid_rank);		
+		//printf("finished broadcast i:%d, %d\n", i, config.grid_rank);		
 		//Matrix multiplication	
 		int ii, j, k;
 		for (ii = 0 ; ii < config.local_dims[0]; ii++) {
@@ -202,8 +202,9 @@ void compute_fox()
 		
 		/* Shfting block B upwards and receive from process below */
 		MPI_Cart_shift(config.col_comm, 0, 1, &src, &dest);
-		MPI_Send(config.B, config.local_size, MPI_DOUBLE, src, config.col_rank, config.col_comm);
-		MPI_Recv(config.B, config.local_size, MPI_DOUBLE, dest, dest, config.col_comm, MPI_STATUS_IGNORE);	
+		MPI_Sendrecv_replace(config.B, config.local_size, MPI_DOUBLE, dest, 0, src, 0, config.col_comm, MPI_STATUS_IGNORE);
+//		MPI_Send(config.B, config.local_size, MPI_DOUBLE, src, config.col_rank, config.col_comm);
+//		MPI_Recv(config.B, config.local_size, MPI_DOUBLE, dest, dest, config.col_comm, MPI_STATUS_IGNORE);	
 	}
 	
 }
