@@ -43,12 +43,12 @@ int main(int argc, char *argv[])
 		MPI_Finalize();
 		exit(1);
 	}
-	printf("init_matmul call! %d\n", world_rank);
+//	printf("init_matmul call! %d\n", world_rank);
 	init_matmul(argv[optind], argv[optind + 1], argv[optind + 2]);
-	printf("finished init_matmul call! %d\n", world_rank);
-	printf("Second comm_rank call! %d\n", world_rank);
+//	printf("finished init_matmul call! %d\n", world_rank);
+//	printf("Second comm_rank call! %d\n", world_rank);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-	printf("Finished second comm_rank call! %d\n", world_rank);
+//	printf("Finished second comm_rank call! %d\n", world_rank);
 
 	int i;
 	for (i = 0; i < repeat; i++){

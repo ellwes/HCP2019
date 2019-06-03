@@ -159,6 +159,13 @@ void cleanup_matmul()
         
 	MPI_File_close(&config.C_file);
         /* Cleanup */
+	free(config.A);
+	free(config.B);
+	free(config.C);
+	free(config.A_tmp);
+
+
+
 }
 
 
@@ -171,7 +178,7 @@ void compute_fox()
 	int diag;
 
 	int i;
-	printf("Inside compute_fox! %d, config.dim is:%d\n", config.grid_rank, config.dim[0]);
+	//printf("Inside compute_fox! %d, config.dim is:%d\n", config.grid_rank, config.dim[0]);
 	for (i = 0; i < config.dim[0]; i++) {
 		//printf("updating A_tmp i:%d, %d\n", i, config.grid_rank);
 		/* Diag + i broadcast block A horizontally and use A_tmp to preserve own local A */
@@ -185,13 +192,15 @@ void compute_fox()
 		//printf("initiating broadcast i:%d, %d\n", i, config.grid_rank);
 		for(diag = 0; diag < config.dim[0]; diag++){
 			if((int)config.grid_rank/config.dim[0] == diag){
+				//printf("grid_rank %d is broadcasted by %d\n", config.grid_rank, (diag+i)%config.dim[0]);
 				//broadcast along the row
 				MPI_Bcast(config.A_tmp, config.local_size, MPI_DOUBLE, (diag+i)%config.dim[0], config.row_comm);
 			}
-		}		
+		}
+
 		//printf("finished broadcast i:%d, %d\n", i, config.grid_rank);		
-		//Matrix multiplication	
-		int ii, j, k;
+		//Matrix multiplication
+		int ii, j, k;	
 		for (ii = 0 ; ii < config.local_dims[0]; ii++) {
 			for (j = 0 ; j < config.local_dims[0]; j++) {
 				for (k = 0 ; k < config.local_dims[1] ; k++) {
@@ -202,7 +211,7 @@ void compute_fox()
 		
 		/* Shfting block B upwards and receive from process below */
 		MPI_Cart_shift(config.col_comm, 0, 1, &src, &dest);
-		MPI_Sendrecv_replace(config.B, config.local_size, MPI_DOUBLE, dest, 0, src, 0, config.col_comm, MPI_STATUS_IGNORE);
+		MPI_Sendrecv_replace(config.B, config.local_size, MPI_DOUBLE, src, 0, dest, 0, config.col_comm, MPI_STATUS_IGNORE);
 //		MPI_Send(config.B, config.local_size, MPI_DOUBLE, src, config.col_rank, config.col_comm);
 //		MPI_Recv(config.B, config.local_size, MPI_DOUBLE, dest, dest, config.col_comm, MPI_STATUS_IGNORE);	
 	}
