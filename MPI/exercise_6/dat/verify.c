@@ -25,11 +25,11 @@ int main(int argc, char *argv[])
 	fread(A, sizeof(double), dims[0] * dims[1], file1);
 	int sizePerProc = 32;
 	int offset = 0;
-	for(int i = 0; i < dims[1]; i++){
-		printf("%d ", A[i]);
+	//for(int i = 0; i < dims[1]; i++){
+	//	printf("%d ", A[i]);
 
-	}
-	printf("\n");
+	//}
+	//printf("\n");
 
 	fclose(file);
 
