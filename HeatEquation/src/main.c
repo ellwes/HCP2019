@@ -6,16 +6,11 @@
 
 int main(int argc, char *argv[]) {
 	/* Variables: */
-
-
-
-
 	const double K = 0.02;
-
-	int size = 81;
+	int size = 36;
 	const double heat_start = 350;
 	const double cold_start = 250;
-	const double time = 1;
+	const double time = 0.1;
 	char * outfile = "outfile.ans"; 
 	MPI_Init(&argc, &argv);
 	
@@ -24,7 +19,6 @@ int main(int argc, char *argv[]) {
 		
 	/* wait for all process to be done with init */
 	MPI_Barrier(MPI_COMM_WORLD);
-	
 	
 	/* start timer */
 	double start_time = MPI_Wtime();
@@ -36,14 +30,18 @@ int main(int argc, char *argv[]) {
 	MPI_Barrier(MPI_COMM_WORLD);
 	double end_time = MPI_Wtime();
 	
+	/*cleanup*/
+	cleanup();
+
 	int world_rank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	
 	/* print given time*/
 	if (world_rank == 0) {
 		double run_time = end_time - start_time;
-		printf("duration: %f", run_time);
+		printf("duration: %f\n", run_time);
 	}
+	print_file();
 	
 	MPI_Finalize();
 

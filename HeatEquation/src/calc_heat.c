@@ -11,8 +11,6 @@ struct Config {
 	/* Full matrix */
 	int matrix_dim[2];
 	int matrix_size;
-		
-
 	/* Communicators */
 	MPI_Comm grid_comm;
 	MPI_Comm part_comm; //Not sure if this can be used
@@ -71,7 +69,6 @@ int is_boundary_cell(int rank, int row, int col){ //function that checks if the 
 			return 1;
 		}
 	}
-	
 	return 0;	
 
 }
@@ -81,16 +78,13 @@ void init_solver(const double K, int size, const double heat_start, const double
  	config.outfile = outfile;
 	
 	/* Init time */	
-	config.time = time; //How should this be handeled between processes?? 
-	
+	config.time = time; //How should this be handeled between processes?? 	
 	config.K = K;	
-
 	config.matrix_size = size;
 
 	/* intit world config */	
 	MPI_Comm_size(MPI_COMM_WORLD, &config.world_size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &config.world_rank);
-
 
  	/* Create Cart communicator for NxN processes */
 	MPI_Dims_create(config.world_size, 2, config.grid_dim);
@@ -99,14 +93,15 @@ void init_solver(const double K, int size, const double heat_start, const double
 	MPI_Cart_create(MPI_COMM_WORLD, 2, config.grid_dim, period, 1, &config.grid_comm);
 	MPI_Comm_rank(config.grid_comm, &config.grid_rank);
 
-
 	/* Setup sizes of local matrix tiles */
 	config.matrix_dim[0] = sqrt(size);
 	config.matrix_dim[1] = sqrt(size);	
 
         config.local_dims[0] = config.matrix_dim[0] / config.grid_dim[0] + 2;
 	config.local_dims[1] = config.matrix_dim[1] / config.grid_dim[1] + 2;
-
+	
+	config.write_local_dims[0] = config.local_dims[0] - 2;
+	config.write_local_dims[1] = config.local_dims[1] - 2;
 
  	/* Create data array */
 	double * m = (double *) calloc(config.local_dims[0] * config.local_dims[1], sizeof(double));
@@ -116,15 +111,6 @@ void init_solver(const double K, int size, const double heat_start, const double
 	config.hx = 1/(double)size;
 	config.hy = 1/(double)size;
 	config.d_time = config.hx * config.hx / 4 / config.K;
-
-	printf("hx: %f, hy: %f, dt: %f\n", config.hx, config.hy, config.d_time);
-	/* Alternative way to initialize the matrix */
-	for(int i = 0; i < config.local_dims[0]; i++){
-		for(int j = 0; j  < config.local_dims[1]; j++){
-			//If it is a boundary
-
-		}
-	}
 
 	int dim0 = config.local_dims[0];
 	/* Init data array with heat_start and cold_start */
@@ -163,7 +149,6 @@ void init_solver(const double K, int size, const double heat_start, const double
 				}
 			}
 			
-			//printf("%d\n", (config.grid_dim[0] - 1) * (config.grid_dim[1])-1);
 			if (config.grid_rank > (config.grid_dim[0] - 1) * (config.grid_dim[1])-1) {
 				//Set lower row
 				if (i == config.local_dims[0] - 2) {
@@ -184,21 +169,6 @@ void init_solver(const double K, int size, const double heat_start, const double
 
 	config.local_matrix = m; 
 	config.local_matrix_tmp = m_tmp; 
-
-	//Print out all matrices, debugging only:
-/*	int i;
-	for(i = 0; i < config.world_size; i++){
-		MPI_Barrier(config.grid_comm);
-		if(config.grid_rank == i){
-			printf("Printing tile: %d\n", config.grid_rank);
-			print_matrix(config.local_matrix);
-		}
-	}
-	//if (config.grid_rank == 4) {
-	//	print_matrix(config.local_matrix);
-	//}
-*/
-
 }
 
 void print_matrix( double * matrix, int rows, int cols) {
@@ -214,41 +184,27 @@ void print_matrix( double * matrix, int rows, int cols) {
 }
 
 void cleanup() {
-	int * write_matrix_dims = (int *) malloc(2*sizeof(int));	
-	write_matrix_dims[0] = config.local_dims[0] - 2;
-	write_matrix_dims[1] = config.local_dims[1] - 2; 
-	
-	int write_matrix_size = write_matrix_dims[0]*write_matrix_dims[1];
+	int write_matrix_size = config.write_local_dims[0]*config.write_local_dims[1];
 	
 	double * write_matrix = (double *) malloc( write_matrix_size * sizeof(double));
 	for(int i = 1; i < config.local_dims[0] - 1; i++) {
 		for(int j = 1; j < config.local_dims[1]- 1; j++) {
 			double element = get_element(i, j, config.local_matrix, config.local_dims[0]);
-			set_element(i-1, j-1, element, write_matrix, write_matrix_dims[0]);
-		}
-	}
-
-	int i;
-	for(i = 0; i < config.world_size; i++){
-		MPI_Barrier(config.grid_comm);
-		if(config.grid_rank == 0){
-			printf("Printing tile: %d\n", config.grid_rank);
-			print_matrix(write_matrix, write_matrix_dims[0], write_matrix_dims[1]);
+			set_element(i-1, j-1, element, write_matrix, config.write_local_dims[0]);
 		}
 	}
 
 	/* Create subarray datatype for local matrix tile */	
 	int * start = (int *) malloc(2*sizeof(int));	
 	MPI_Cart_coords(config.grid_comm, config.grid_rank, 2, start);
-	start[0] *= write_matrix_dims[0];  
-	start[1] *= write_matrix_dims[1];  
-	
+	start[0] *= config.write_local_dims[0];  
+	start[1] *= config.write_local_dims[1];  
 
-	MPI_Type_create_subarray(2, config.matrix_dim, write_matrix_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &(config.block));
+	MPI_Type_create_subarray(2, config.matrix_dim, config.write_local_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &(config.block));
 	MPI_Type_commit(&(config.block));	
 	
 	MPI_Offset view_offset = 0;
-	MPI_File_open(MPI_COMM_WORLD, "o.ans", (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &config.out);
+	MPI_File_open(MPI_COMM_WORLD, config.outfile, (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &config.out);
 	MPI_File_set_view(config.out, view_offset, MPI_DOUBLE, (config.block), "native",  MPI_INFO_NULL);
 	MPI_File_write_all(config.out, write_matrix, write_matrix_size, MPI_DOUBLE, MPI_STATUS_IGNORE);	
 	
@@ -257,9 +213,9 @@ void cleanup() {
 }
 
 void print_file() {	
-	MPI_File_open(MPI_COMM_WORLD, "o.ans", (MPI_MODE_RDONLY), MPI_INFO_NULL, &config.out);
+	MPI_File_open(MPI_COMM_WORLD, config.outfile, (MPI_MODE_RDONLY), MPI_INFO_NULL, &config.out);
 	if (config.world_rank == 0) {
-		printf("MATRIX_SIZE: %d\n", config.matrix_size);		
+		printf("\nMATRIX_SIZE: %d\n", config.matrix_size);		
 		double buf[config.matrix_size];
 		MPI_File_read(config.out, &buf, config.matrix_size, MPI_DOUBLE, MPI_STATUS_IGNORE);
 		for (int i = 0; i < config.matrix_size; i++) {
@@ -269,29 +225,21 @@ void print_file() {
 }
 
 
-
-
 void step() {
-	
 	//	up, down, left, right
 	int dir[4] = {-1, -1, -1, -1};
 	
 	//These arrays are the same, no matter what. Maybe put them in config and initialize in init to save time?
-	//int offset_row[4] = {0, config.local_dims[0], 1, 1}; //row offset start
-	//int offset_col[4] = {1, 1, 0, config.local_dims[1]}; //col offset start
 	int offset_row[4] = {1, config.write_local_dims[0], 1, 1};
 	int offset_col[4] = {1, 1, 1, config.write_local_dims[1]};
 
 	//top row, bottom row, left col, right col
 	int recv_cell[4] = {0, config.local_dims[0] - 1, 0, config.local_dims[1] - 1};
-	
 	int rec_row, rec_col;	//receiving row & column pos.	
-
 
 	//Observe that this might be wrong and more Cart_shifts may be needed.
 	MPI_Cart_shift(config.grid_comm, 0, 1, &dir[0], &dir[1]);	//shift up/down
 	MPI_Cart_shift(config.grid_comm, 1, 1, &dir[2], &dir[3]);	//shift left/right
-	//printf("I am %d, up/down is %d/%d. And my left/right is %d/%d\n", config.grid_rank, dir[0], dir[1], dir[2], dir[3]);
 
 	int i;
 	double send_buffer, recv_buffer;
@@ -300,22 +248,14 @@ void step() {
 		int j;
 		for(j = 0; j < config.local_dims[(int) i/2] - 2; j++){ //i = 0/1 are rows, 2/4 are cols
 			//send buffer depending if it's a row or col ghost cell.
-			//send_buffer = i < 2 ? config.matrix[offset_row[i]][offset_col[i]+j] : config.matrix[offset_row[i]+j][offset_col[i]]
-			//set send_buffer and receiving row/col to correct values depending on current row that is being sent.
-			
-
 			if(i < 2){
 				send_buffer = get_element(offset_row[i], offset_col[i] + j, config.local_matrix, config.local_dims[0]);
-				//send_buffer = config.local_matrix[offset_row[i]][offset_col[i] + j];
 				rec_row = recv_cell[i];
 				rec_col = offset_col[i] + j;
 
 			}
 			else{
 				send_buffer = get_element(offset_row[i] + j, offset_col[i], config.local_matrix, config.local_dims[0]);
-				//send_buffer = config.local_matrix[offset_row[i] + j][offset_col[i]];
-			
-
 				rec_row = offset_row[i] + j;
 				rec_col = recv_cell[i];
 			}
@@ -327,8 +267,6 @@ void step() {
 			}					
 		}
 	}
-
-	
 
 	
 	int j; 
@@ -344,39 +282,26 @@ void step() {
 				double u_21 = get_element(i + 1, j, config.local_matrix, config.local_dims[0]);
 				double u_10 = get_element(i, j - 1, config.local_matrix, config.local_dims[0]);
 				double u_12 = get_element(i, j + 1, config.local_matrix, config.local_dims[0]); 			
-				//printf("dt: %f\n", config.d_time);
 				tmp = u_11 + config.K * config.d_time * ((u_21 - 2 * u_11 + u_01) / config.hx / config.hx  +  (u_12 -2 * u_11 + u_10) / config.hy / config.hy);
-				//set_element(i, j, tmp, config.local_matrix_tmp);
 				
  			}
-			else{
-				//printf("rank: %d, cell: (%d, %d) was a boundary cell!\n", config.grid_rank, i, j);
+			else {
+				tmp = get_element(i, j, config.local_matrix, config.local_dims[0]);
+			}
 			set_element(i, j, tmp, config.local_matrix, config.local_dims[0]);
-		}
 
-	}
+		}	
 
-	//For debugging only
-	for(i = 0; i < config.world_size; i++){
-		MPI_Barrier(config.grid_comm);
-		if(config.grid_rank == i){
-			printf("Post step, printing tile: %d\n", config.grid_rank);
-			print_matrix(config.local_matrix, config.local_dims[0], config.local_dims[1]);
-		}
-	}
-}
+	}	
 }
 
 
 void calc_heat() {
  
- for(double t = 0; t < config.time; t++) { //Maybe change this to the other way around? (t = 0; t < config.time; t++)
- 	/* Broadcast values to close cells */
- 	/* Calculate current theta */
+ for(double t = 0; t < config.time; t+=config.d_time) { //Maybe change this to the other way around? (t = 0; t < config.time; t++)
 	step();
 	MPI_Barrier(config.grid_comm);
  }
-
 }
 
 
