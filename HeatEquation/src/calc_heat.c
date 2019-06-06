@@ -202,9 +202,13 @@ void cleanup() {
 
 	MPI_Type_create_subarray(2, config.matrix_dim, config.write_local_dims, start,  MPI_ORDER_C, MPI_DOUBLE, &(config.block));
 	MPI_Type_commit(&(config.block));	
-	
-	MPI_Offset view_offset = 0;
+
 	MPI_File_open(MPI_COMM_WORLD, config.outfile, (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &config.out);
+	//Write time to file
+	if (config.world_rank == 0) {
+		MPI_File_write(config.out, &config.time, 1, MPI_DOUBLE, MPI_STATUS_IGNORE);
+	}	
+	MPI_Offset view_offset = 1*sizeof(double);
 	MPI_File_set_view(config.out, view_offset, MPI_DOUBLE, (config.block), "native",  MPI_INFO_NULL);
 	MPI_File_write_all(config.out, write_matrix, write_matrix_size, MPI_DOUBLE, MPI_STATUS_IGNORE);	
 	
@@ -242,12 +246,20 @@ void step() {
 	MPI_Cart_shift(config.grid_comm, 1, 1, &dir[2], &dir[3]);	//shift left/right
 
 	int i;
-	double send_buffer, recv_buffer;
+	double send_buffer;//, recv_buffer;
+	
+	//MPI_Request * req_send = (int*) calloc((local.write_local_dims[0])*4, sizeof(int));  
+	//MPI_Request * req_recv =  (int*) calloc((local.write_local_dims[0])*4, sizeof(int));  
+	MPI_Request req_send[config.write_local_dims[0]*4];
+	double recv_buffer[config.write_local_dims[0]*4];
+
 	for(i = 0; i < 4; i++){
 		//Get the element to send and put it in buffer:
 		int j;
 		for(j = 0; j < config.local_dims[(int) i/2] - 2; j++){ //i = 0/1 are rows, 2/4 are cols
 			//send buffer depending if it's a row or col ghost cell.
+
+			int req_index = i*config.write_local_dims[0] + j;
 			if(i < 2){
 				send_buffer = get_element(offset_row[i], offset_col[i] + j, config.local_matrix, config.local_dims[0]);
 				rec_row = recv_cell[i];
@@ -261,14 +273,50 @@ void step() {
 			}
 			
 			if(dir[i] != MPI_PROC_NULL){ //send & recv.
-				MPI_Send(&send_buffer, 1, MPI_DOUBLE, dir[i], config.grid_rank, config.grid_comm);
-				MPI_Recv(&recv_buffer, 1, MPI_DOUBLE, dir[i], dir[i], config.grid_comm, MPI_STATUS_IGNORE);
-				set_element(rec_row, rec_col, recv_buffer, config.local_matrix, config.local_dims[0]);
+				MPI_Isend(&send_buffer, 1, MPI_DOUBLE, dir[i], config.grid_rank, config.grid_comm, &(req_send[req_index]));
+				MPI_Irecv(&(recv_buffer[req_index]), 1, MPI_DOUBLE, dir[i], dir[i], config.grid_comm, &(req_send[req_index]));
+				//set_element(rec_row, rec_col, recv_buffer, config.local_matrix, config.local_dims[0]);
+
+			} else {
+				MPI_Isend(&send_buffer, 1, MPI_DOUBLE, config.grid_rank, config.grid_rank, config.grid_comm, &(req_send[req_index]));
+				MPI_Irecv(&recv_buffer[req_index], 1, MPI_DOUBLE, config.grid_rank, config.grid_rank, config.grid_comm, &(req_send[req_index]));
 			}					
 		}
 	}
 
+	if(config.grid_rank == 0) {
+		print_matrix(config.local_matrix, config.local_dims[0], config.local_dims[1]);
+	}
 	
+
+	MPI_Waitall(config.write_local_dims[0] * 4, req_send, MPI_STATUS_IGNORE);
+	//MPI_Waitall(config.write_local_dims[0] * 4, req_send, MPI_STATUS_IGNORE);
+	
+	for(int i = 0; i < config.write_local_dims[0] * 4; i++) {
+		int j = i % config.write_local_dims[0];
+		
+		//top
+		if(i < config.write_local_dims[0]){
+			set_element(0, j + 1, recv_buffer[i], config.local_matrix, config.local_dims[0]);
+		}
+		//bottom
+		else if (i-config.write_local_dims[0] < config.write_local_dims[0]){
+			set_element(config.local_dims[0]-1, j+1, recv_buffer[i], config.local_matrix, config.local_dims[0]);
+
+		}
+		//left
+		else if(i - 2*config.write_local_dims[0] < config.write_local_dims[0]){
+			set_element(j+1, 0, recv_buffer[i], config.local_matrix, config.local_dims[0]);
+
+
+		}
+		//right
+		else if(i - 3*config.write_local_dims[0] < config.write_local_dims[0]){
+			set_element(j+1, config.local_dims[1]-1, recv_buffer[i], config.local_matrix, config.local_dims[0]);
+		
+		}	
+	}
+
 	int j; 
 	//Loop through all the inner points of the matrix. The outer points will either be updated by other processes or remain constant.
 	for(i = 1; i < config.local_dims[0] - 1; i++){
@@ -293,6 +341,7 @@ void step() {
 		}	
 
 	}	
+	
 }
 
 
