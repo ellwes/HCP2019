@@ -1,7 +1,7 @@
 # HCP2019 - Project
 
 ## Environment
-At beskow change to the gnu environment:
+At Beskow, change to the gnu environment:
 ```
 module swap PrgEnv-cray PrgEnv-gnu
 ```
