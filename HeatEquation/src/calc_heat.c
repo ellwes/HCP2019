@@ -108,8 +108,8 @@ void init_solver(const double K, int size, const double heat_start, const double
 	double * m_tmp = (double *) calloc(config.local_dims[0] * config.local_dims[1], sizeof(double));
 
 	/*spatial & time steps*/
-	config.hx = 1/(double)size;
-	config.hy = 1/(double)size;
+	config.hx = 1.0/config.matrix_dim[0];
+	config.hy = 1.0/config.matrix_dim[1];
 	config.d_time = config.hx * config.hx / 4 / config.K;
 
 	int dim0 = config.local_dims[0];
@@ -214,6 +214,8 @@ void cleanup() {
 	
 	/* Close file */
 	MPI_File_close(&config.out);
+	free(config.local_matrix);
+	free(config.local_matrix_tmp);
 }
 
 void print_file() {	
@@ -229,128 +231,130 @@ void print_file() {
 }
 
 
-void step() {
+void calc_heat() {
+
 	//	up, down, left, right
 	int dir[4] = {-1, -1, -1, -1};
-	
+		
 	//These arrays are the same, no matter what. Maybe put them in config and initialize in init to save time?
 	int offset_row[4] = {1, config.write_local_dims[0], 1, 1};
 	int offset_col[4] = {1, 1, 1, config.write_local_dims[1]};
 
 	//top row, bottom row, left col, right col
-	int recv_cell[4] = {0, config.local_dims[0] - 1, 0, config.local_dims[1] - 1};
-	int rec_row, rec_col;	//receiving row & column pos.	
-
-	//Observe that this might be wrong and more Cart_shifts may be needed.
-	MPI_Cart_shift(config.grid_comm, 0, 1, &dir[0], &dir[1]);	//shift up/down
-	MPI_Cart_shift(config.grid_comm, 1, 1, &dir[2], &dir[3]);	//shift left/right
-
-	int i;
+	//int recv_cell[4] = {0, config.local_dims[0] - 1, 0, config.local_dims[1] - 1};
+	
 	double send_buffer;//, recv_buffer;
 	
-	//MPI_Request * req_send = (int*) calloc((local.write_local_dims[0])*4, sizeof(int));  
-	//MPI_Request * req_recv =  (int*) calloc((local.write_local_dims[0])*4, sizeof(int));  
-	MPI_Request req_send[config.write_local_dims[0]*4];
-	double recv_buffer[config.write_local_dims[0]*4];
 
-	for(i = 0; i < 4; i++){
-		//Get the element to send and put it in buffer:
-		int j;
-		for(j = 0; j < config.local_dims[(int) i/2] - 2; j++){ //i = 0/1 are rows, 2/4 are cols
-			//send buffer depending if it's a row or col ghost cell.
+	for(double t = 0; t < config.time; t+=config.d_time){
+		//Observe that this might be wrong and more Cart_shifts may be needed.
+		MPI_Cart_shift(config.grid_comm, 0, 1, &dir[0], &dir[1]);	//shift up/down
+		MPI_Cart_shift(config.grid_comm, 1, 1, &dir[2], &dir[3]);	//shift left/right
+		MPI_Request * req_send = (MPI_Request *) calloc(config.write_local_dims[0]*4, sizeof(MPI_Request));
+		double * recv_buffer = (double *) calloc(config.write_local_dims[0]*4, sizeof(double));
 
-			int req_index = i*config.write_local_dims[0] + j;
-			if(i < 2){
-				send_buffer = get_element(offset_row[i], offset_col[i] + j, config.local_matrix, config.local_dims[0]);
-				rec_row = recv_cell[i];
-				rec_col = offset_col[i] + j;
 
+			
+		//MPI_Request * req_send = (int*) calloc((local.write_local_dims[0])*4, sizeof(int));  
+		//MPI_Request * req_recv =  (int*) calloc((local.write_local_dims[0])*4, sizeof(int));  
+		for(int i = 0; i < 4; i++){
+			//Get the element to send and put it in buffer:
+			for(int j = 0; j < config.local_dims[(int) i/2] - 2; j++){ //i = 0/1 are rows, 2/4 are cols
+				//send buffer depending if it's a row or col ghost cell.
+	
+				int req_index = i*config.write_local_dims[0] + j;
+				if(i < 2){
+					send_buffer = get_element(offset_row[i], offset_col[i] + j, config.local_matrix, config.local_dims[0]);
 			}
-			else{
-				send_buffer = get_element(offset_row[i] + j, offset_col[i], config.local_matrix, config.local_dims[0]);
-				rec_row = offset_row[i] + j;
-				rec_col = recv_cell[i];
+				else{
+					send_buffer = get_element(offset_row[i] + j, offset_col[i], config.local_matrix, config.local_dims[0]);
 			}
 			
-			if(dir[i] != MPI_PROC_NULL){ //send & recv.
-				MPI_Isend(&send_buffer, 1, MPI_DOUBLE, dir[i], config.grid_rank, config.grid_comm, &(req_send[req_index]));
-				MPI_Irecv(&(recv_buffer[req_index]), 1, MPI_DOUBLE, dir[i], dir[i], config.grid_comm, &(req_send[req_index]));
-				//set_element(rec_row, rec_col, recv_buffer, config.local_matrix, config.local_dims[0]);
+				if(dir[i] != MPI_PROC_NULL){ //send & recv.
+					MPI_Isend(&send_buffer, 1, MPI_DOUBLE, dir[i], config.grid_rank, config.grid_comm, &(req_send[req_index]));
+					MPI_Irecv(&(recv_buffer[req_index]), 1, MPI_DOUBLE, dir[i], dir[i], config.grid_comm, &(req_send[req_index]));
+					//set_element(rec_row, rec_col, recv_buffer, config.local_matrix, config.local_dims[0]);
 
-			} else {
-				MPI_Isend(&send_buffer, 1, MPI_DOUBLE, config.grid_rank, config.grid_rank, config.grid_comm, &(req_send[req_index]));
-				MPI_Irecv(&recv_buffer[req_index], 1, MPI_DOUBLE, config.grid_rank, config.grid_rank, config.grid_comm, &(req_send[req_index]));
-			}					
-		}
-	}
-
-	if(config.grid_rank == 0) {
-		print_matrix(config.local_matrix, config.local_dims[0], config.local_dims[1]);
-	}
-	
-
-	MPI_Waitall(config.write_local_dims[0] * 4, req_send, MPI_STATUS_IGNORE);
-	//MPI_Waitall(config.write_local_dims[0] * 4, req_send, MPI_STATUS_IGNORE);
-	
-	for(int i = 0; i < config.write_local_dims[0] * 4; i++) {
-		int j = i % config.write_local_dims[0];
-		
-		//top
-		if(i < config.write_local_dims[0]){
-			set_element(0, j + 1, recv_buffer[i], config.local_matrix, config.local_dims[0]);
-		}
-		//bottom
-		else if (i-config.write_local_dims[0] < config.write_local_dims[0]){
-			set_element(config.local_dims[0]-1, j+1, recv_buffer[i], config.local_matrix, config.local_dims[0]);
-
-		}
-		//left
-		else if(i - 2*config.write_local_dims[0] < config.write_local_dims[0]){
-			set_element(j+1, 0, recv_buffer[i], config.local_matrix, config.local_dims[0]);
-
-
-		}
-		//right
-		else if(i - 3*config.write_local_dims[0] < config.write_local_dims[0]){
-			set_element(j+1, config.local_dims[1]-1, recv_buffer[i], config.local_matrix, config.local_dims[0]);
-		
-		}	
-	}
-
-	int j; 
-	//Loop through all the inner points of the matrix. The outer points will either be updated by other processes or remain constant.
-	for(i = 1; i < config.local_dims[0] - 1; i++){
-		for(j = 1; j < config.local_dims[1] - 1; j++){
-			//check that it is not a boundary value:
-			double tmp = 0;
-			if(!is_boundary_cell(config.grid_rank, i, j)){
-				//Compute the stepping. Where to define K.
-				double u_11 = get_element(i, j, config.local_matrix, config.local_dims[0]);
-				double u_01 = get_element(i - 1, j, config.local_matrix, config.local_dims[0]);
-				double u_21 = get_element(i + 1, j, config.local_matrix, config.local_dims[0]);
-				double u_10 = get_element(i, j - 1, config.local_matrix, config.local_dims[0]);
-				double u_12 = get_element(i, j + 1, config.local_matrix, config.local_dims[0]); 			
-				tmp = u_11 + config.K * config.d_time * ((u_21 - 2 * u_11 + u_01) / config.hx / config.hx  +  (u_12 -2 * u_11 + u_10) / config.hy / config.hy);
-				
- 			}
-			else {
-				tmp = get_element(i, j, config.local_matrix, config.local_dims[0]);
+				} else {
+					MPI_Isend(&send_buffer, 1, MPI_DOUBLE, config.grid_rank, config.grid_rank, config.grid_comm, &(req_send[req_index]));
+					MPI_Irecv(&recv_buffer[req_index], 1, MPI_DOUBLE, config.grid_rank, config.grid_rank, config.grid_comm, &(req_send[req_index]));
+				}					
 			}
-			set_element(i, j, tmp, config.local_matrix, config.local_dims[0]);
+		}
 
-		}	
+		//if(config.grid_rank == 0) {
+		//	print_matrix(config.local_matrix, config.local_dims[0], config.local_dims[1]);
+		//}
+	
 
+		MPI_Waitall(config.write_local_dims[0] * 4, req_send, MPI_STATUS_IGNORE);
+		//MPI_Waitall(config.write_local_dims[0] * 4, req_send, MPI_STATUS_IGNORE);
+	
+		for(int i = 0; i < config.write_local_dims[0] * 4; i++) {
+			int j = i % config.write_local_dims[0];
+		
+			//top
+			if(i < config.write_local_dims[0]){
+				set_element(0, j + 1, recv_buffer[i], config.local_matrix, config.local_dims[0]);
+			}
+			//bottom
+			else if (i-config.write_local_dims[0] < config.write_local_dims[0]){
+				set_element(config.local_dims[0]-1, j+1, recv_buffer[i], config.local_matrix, config.local_dims[0]);
+			}
+			//left
+			else if(i - 2*config.write_local_dims[0] < config.write_local_dims[0]){
+				set_element(j+1, 0, recv_buffer[i], config.local_matrix, config.local_dims[0]);
+			}
+			//right
+			else if(i - 3*config.write_local_dims[0] < config.write_local_dims[0]){
+				set_element(j+1, config.local_dims[1]-1, recv_buffer[i], config.local_matrix, config.local_dims[0]);	
+			}	
+		}
+
+	//	free(recv_buffer);
+	//	free(req_send);
+		//printf("Finished updating ghost cells for grid: %d\n", config.grid_rank);
+		//Loop through all the inner points of the matrix. The outer points will either be updated by other processes or remain constant.
+		for(int i = 1; i < config.local_dims[0] - 1; i++){
+			for(int j = 1; j < config.local_dims[1] - 1; j++){
+				//check that it is not a boundary value:
+				double tmp = 0;
+				if(!is_boundary_cell(config.grid_rank, i, j)){
+					//Compute the stepping. Where to define K.
+					double u_11 = get_element(i, j, config.local_matrix, config.local_dims[0]);
+					double u_01 = get_element(i - 1, j, config.local_matrix, config.local_dims[0]);
+					double u_21 = get_element(i + 1, j, config.local_matrix, config.local_dims[0]);
+					double u_10 = get_element(i, j - 1, config.local_matrix, config.local_dims[0]);
+					double u_12 = get_element(i, j + 1, config.local_matrix, config.local_dims[0]); 			
+					tmp = u_11 + config.K * config.d_time * ((u_21 - 2 * u_11 + u_01) / config.hx / config.hx  +  (u_12 -2 * u_11 + u_10) / config.hy / config.hy);			
+ 				}
+				else {
+					tmp = get_element(i, j, config.local_matrix, config.local_dims[0]);
+				}
+				set_element(i, j, tmp, config.local_matrix_tmp,config.local_dims[0]);
+
+			}	
+		}
+		for(int i = 1; i < config.local_dims[0] - 1; i++){
+			for(int j = 1; j < config.local_dims[1] - 1; j++){
+				set_element(i, j, get_element(i, j, config.local_matrix_tmp, config.local_dims[0]), config.local_matrix, config.local_dims[0]);
+			}
+
+		}
+
+
+		MPI_Barrier(config.grid_comm);
 	}	
 	
 }
 
 
-void calc_heat() {
+//void calc_heat() {
  
- for(double t = 0; t < config.time; t+=config.d_time) { //Maybe change this to the other way around? (t = 0; t < config.time; t++)
-	step();
-	MPI_Barrier(config.grid_comm);
- }
-}
+// for(double t = 0; t < config.time; t+=config.d_time) { //Maybe change this to the other way around? (t = 0; t < config.time; t++)
+//	step();
+//	MPI_Barrier(config.grid_comm);
+// }
+//}
 
 

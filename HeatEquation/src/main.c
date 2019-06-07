@@ -8,11 +8,11 @@
 int main(int argc, char *argv[]) {
 	/* Variables: */
 	const double K = 0.02;
-	int size = 81;
+	int size = 1296;
 	const double heat_start = 350;
 	const double cold_start = 250;
-	const double time = 0.1;
-	char * outfile = "81.ans"; 
+	const double time = 0.05;
+	char * outfile = "test.ans"; 
 	int repeat = 10;
 
 	
