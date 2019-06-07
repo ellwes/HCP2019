@@ -9,9 +9,13 @@ The code for the non-blocking implementation can be found in the folder HeatEqua
 The name of the outfile and the matrix size are declared in src/main.c and can be change to appropriate values.
 
 Compile with 
+```
 make
+```
 Run with
+```
 aprun -n <nr_nodes> ./bin/calc.out
+```
 The matrix are then printed to the outfile declared in src/main.c in binary.
 
 ## In order to create a plot
@@ -23,9 +27,13 @@ The code for the blocking implementation can be found in the folder Blocking
 The name of the outfile and the matrix size are declared in src/main.c and can be change to appropriate values.
 
 Compile with 
+```
 make
+```
 Run with
+```
 aprun -n <nr_nodes> ./bin/calc.out
+```
 The matrix are then printed to the outfile declared in src/main.c in binary.
 
 ## In order to create a plot
