@@ -2,7 +2,9 @@
 
 ## Environment
 At beskow change to the gnu environment:
+```
 module swap PrgEnv-cray PrgEnv-gnu
+```
 
 ## Run non-blocking
 The code for the non-blocking implementation can be found in the folder HeatEquation.
